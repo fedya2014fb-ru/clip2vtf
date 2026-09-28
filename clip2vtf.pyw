@@ -3690,8 +3690,20 @@ class App:
             except Exception:
                 pass
         cmd = [sys.executable] + ([] if FROZEN else [os.path.abspath(__file__)]) + args
+        env = dict(os.environ)
+        if FROZEN:
+            # exe из одного файла: без этого новый экземпляр наследует переменные PyInstaller и
+            # работает из распакованной папки СТАРОГО (_MEIxxxx) - её удаляют при его выходе, и у
+            # нового пропадают DLL/Tcl/переводы (или старый не может удалить папку и ругается
+            # "Failed to remove temporary directory"). Сброс = новый самостоятельный запуск.
+            env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+            for k in list(env):
+                if k.startswith("_PYI_") or k in ("_MEIPASS2", "TCL_LIBRARY", "TK_LIBRARY"):
+                    env.pop(k, None)
         try:
-            subprocess.Popen(cmd, close_fds=True)
+            # отдельно от старого процесса: не его дочерний, в своей группе, без консоли
+            subprocess.Popen(cmd, close_fds=True, env=env,
+                             creationflags=0x00000008 | 0x00000200)  # DETACHED_PROCESS | NEW_PROCESS_GROUP
         except OSError as e:
             self.set_status(tr("Не удалось перезапустить: {e}").format(e=e), error=True)
             return
