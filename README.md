@@ -9,6 +9,10 @@ as the texture of that brush face, or as an overlay.
 [Русский ниже](#русский) · Interface in 10 languages: English, Русский, Українська, Deutsch, Français,
 Español, Português (Brasil), Polski, Türkçe, 简体中文.
 
+**Video demo:** https://www.youtube.com/watch?v=nuWXQTaVPDw
+
+[![clip2vtf video demo](https://img.youtube.com/vi/nuWXQTaVPDw/hqdefault.jpg)](https://www.youtube.com/watch?v=nuWXQTaVPDw)
+
 ![Main window](docs/main_window.png)
 
 ## Features
@@ -109,6 +113,8 @@ MIT, see [LICENSE](LICENSE). Bundled third-party components: [THIRD_PARTY.md](TH
 ## Русский
 
 **Любая картинка → материал TF2 / Source через перетягивание картинки, и сразу на стену в Hammer++.**
+
+**Видео-демонстрация:** https://www.youtube.com/watch?v=nuWXQTaVPDw
 
 Скопируй картинку в браузере и нажми Ctrl+V или перетащи её в окно — clip2vtf запишет правильные
 `.vtf` + `.vmt`. А если перетащить картинку прямо на Hammer++, она окажется на стене, над которой её
