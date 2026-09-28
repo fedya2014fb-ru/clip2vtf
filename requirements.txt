@@ -1,0 +1,5 @@
+Pillow>=10
+numpy>=1.24
+# the VTF writer relies on srctools 2.7 internals (_format_funcs, the Cython DXT encoder)
+srctools>=2.7,<2.8
+tkinterdnd2>=0.4

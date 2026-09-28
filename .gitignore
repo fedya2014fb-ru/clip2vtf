@@ -1,0 +1,10 @@
+# per-user data written next to the program
+clip2vtf_settings.json
+clip2vtf_hammer.log
+sources/
+.clip2vtf_write_test
+# build output
+build/
+dist/
+__pycache__/
+*.pyc
