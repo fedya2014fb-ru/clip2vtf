@@ -287,7 +287,12 @@ DEFAULTS = {
     "send_hammer": False,
     "hammer_drop": True,
     "size_panel": True,
-    "brush_fit": True,         # режим "текстура на браш": растянуть на всю грань (Fit)
+    # режим "текстура на браш": как положить картинку на грань (см. BRUSH_FITS и др.)
+    "brush_mode": "Растянуть на всю грань (Fit)",
+    "brush_scale": "0.25",
+    "brush_align": "По центру",
+    "brush_rotate": "0",
+    "brush_luxel": "не менять",
     "hammer_opts_open": True,  # раскрыты ли настройки на панели поверх Hammer
     "lang": LANG,              # язык интерфейса (см. LANGUAGES), по умолчанию - язык Windows
     "hammer_mode": "Декаль (размер из настройки)",  # Apply decals - так попросил пользователь
@@ -347,10 +352,6 @@ SAVE_CHECKS = [
      "появляется на стене декалью, текстурой грани или оверлеем (\"В Hammer как\" ниже). "
      "После этого снова включается Selection. Материал с тем же именем не перезаписывается "
      "(добавляется _2, _3).")),
-    ("brush_fit", tr("Текстура на браш: растянуть на всю грань (Fit)"),
-     tr("В режиме \"Текстура на браш\" картинка растягивается ровно на грань, над которой её "
-     "отпустили (кнопка Fit в окне Face Edit Hammer). Выключи, чтобы текстура легла в обычном "
-     "масштабе Hammer и повторялась плиткой.")),
     ("size_panel", tr("Ползунок размера декали поверх Hammer"),
      tr("Когда в Hammer выделена декаль (infodecal), в его заголовке появляется панель "
      "\"Декаль: [ползунок] [число] юн.\". Размер тянется ползунком, крутится колесом или "
@@ -452,6 +453,12 @@ ALPHA_MODES = ["Авто", "Нет", "$translucent", "$alphatest"]
 HAMMER_MODES = ["Декаль (размер из настройки)", "Текстура на браш (грань под курсором)",
                 "Оверлей (растягивается мышью)"]
 TOOL_DECAL, TOOL_FACE, TOOL_OVERLAY = 33008, 32913, 33107
+# Режим "текстура на браш": как положить картинку на грань (окно Face Edit Hammer).
+BRUSH_FITS = ["Растянуть на всю грань (Fit)", "Заполнить грань, сохранив пропорции",
+              "Вписать целиком, сохранив пропорции", "Свой масштаб", "Масштаб Hammer (плиткой)"]
+BRUSH_ALIGNS = ["По центру", "Как есть", "Влево", "Вправо", "Вверх", "Вниз"]
+BRUSH_ROTATES = ["0", "90", "180", "270"]
+BRUSH_LUXELS = ["не менять", "4", "8", "16", "32", "64"]
 HAMMER_TOOL = {HAMMER_MODES[0]: TOOL_DECAL, HAMMER_MODES[1]: TOOL_FACE, HAMMER_MODES[2]: TOOL_OVERLAY}
 
 # Раскладка вкладок. Строка = ключ настройки, кортеж ("note", текст) = пояснение.
@@ -464,6 +471,11 @@ FIELD_DEFS = {  # ключ -> (подпись, значения списка; No
     "alpha_mode": (tr("Прозрачность:"), ALPHA_MODES),
     "decal_units": (tr("Декаль, ширина\nв юнитах:"), None),
     "hammer_mode": (tr("В Hammer как:"), HAMMER_MODES),
+    "brush_mode": (tr("Текстура на браш:"), BRUSH_FITS),
+    "brush_scale": (tr("Свой масштаб\n(юнитов на пиксель):"), None),
+    "brush_align": (tr("Выравнивание:"), BRUSH_ALIGNS),
+    "brush_rotate": (tr("Поворот, градусы:"), BRUSH_ROTATES),
+    "brush_luxel": (tr("Лайтмапа (luxel):"), BRUSH_LUXELS),
 }
 CHECK_DEFS = {k: (t, d) for k, t, d in TEXTURE_CHECKS + MATERIAL_CHECKS + SAVE_CHECKS}
 TAB_LAYOUT = {
@@ -475,12 +487,19 @@ TAB_LAYOUT = {
             ("note", tr("Прозрачность \"Авто\": $translucent для плавной альфы, $alphatest для резкой "
                      "(только 0/255). Для масштаба: игрок - около 83 юнитов в высоту."))]
            + [k for k, _, _ in MATERIAL_CHECKS],
-    "save": ["hammer_drop", "hammer_mode", "brush_fit", "size_panel",
+    "hammer": ["hammer_drop", "hammer_mode", "size_panel",
              ("note", tr("Декаль (Apply decals): размер задаёт \"Декаль, ширина в юнитах\" на вкладке "
                       "Материал, мышью в Hammer она не растягивается. Текстура на браш ложится на "
                       "грань, над которой отпустил картинку. Оверлей (Apply overlays) можно растянуть "
                       "за углы в 3D-виде."))]
-            + [k for k, _, _ in SAVE_CHECKS if k not in ("hammer_drop", "brush_fit", "size_panel")],
+            + ["send_hammer",
+               ("note", tr("Текстура на браш: \"Заполнить\" растягивает картинку без искажения, пока "
+                        "она не закроет всю грань (края обрезаются), \"Вписать целиком\" - пока вся "
+                        "картинка не поместится (остаток грани заполнится её повтором). Свой масштаб: "
+                        "0.25 - как у стандартных текстур, 1 - один пиксель на юнит. Лайтмапа: меньше "
+                        "число - чётче тени на картинке, но дороже для карты (по умолчанию 16).")),
+               "brush_mode", "brush_scale", "brush_align", "brush_rotate", "brush_luxel"],
+    "save": [k for k, _, _ in SAVE_CHECKS if k not in ("hammer_drop", "size_panel", "send_hammer")],
 }
 ALL_SETTINGS = [k for items in TAB_LAYOUT.values() for k in items if isinstance(k, str)]
 DEFAULT_FAVORITES = ["fit", "fmt", "shader", "decal_units", "bg_remove", "trim", "mirror_client",
@@ -2179,16 +2198,16 @@ def wait_mouse_released(limit=15.0):
     return not lbutton_down()
 
 
-def hammer_place(material, new_file, tool_id, pt, progress=lambda s: None, fit=True):
+def hammer_place(material, new_file, tool_id, pt, progress=lambda s: None, face=None):
     """Перетащенная в Hammer картинка -> на стену: текстура текущая, инструмент оверлеев/декалей,
     клик в точку отпускания. Кликает сам Hammer-инструмент, так что это то же самое, что сделал
     бы маппер рукой (и Ctrl+Z его отменяет). Вызывается из фонового потока.
     Режим "текстура на браш" (TOOL_FACE) - свой порядок шагов, см. _hammer_texture_face."""
     ctypes, wintypes, u = _u32()
     t0 = time.time()
-    hlog(f"--- drop {material} new={new_file} tool={tool_id} pt={pt} fit={fit}")
+    hlog(f"--- drop {material} new={new_file} tool={tool_id} pt={pt} face={face}")
     if tool_id == TOOL_FACE:
-        ok, msg = _hammer_texture_face(material, new_file, pt, fit, progress)
+        ok, msg = _hammer_texture_face(material, new_file, pt, face or {}, progress)
         hlog(f"done ok={ok} ({time.time() - t0:.1f}s) {msg}")
         return ok, msg
     progress(tr("выбираю текстуру в Hammer..."))
@@ -2214,14 +2233,31 @@ ID_TOOL_SELECTION = 32813  # "Selection" - первая кнопка панел�
 # Окно "Face Edit Sheet" (инструмент Texture application), страница "Material" - id прочитаны
 # с живого Hammer++: Apply 1015, Fit 1406, размер текстуры (Static) 1027.
 FACE_APPLY, FACE_FIT, FACE_TEXSIZE = 1015, 1406, 1027
+FACE_SCALE_X, FACE_SCALE_Y, FACE_ROTATION, FACE_LUXEL = 1009, 1150, 1023, 1389
+FACE_JUSTIFY = {"По центру": 1405, "Влево": 1404, "Вправо": 1407, "Вверх": 1403, "Вниз": 1411}
 
 
-def _hammer_texture_face(material, new_file, pt, fit, progress):
+def _face_number(ed):
+    try:
+        return float(_hw_text(ed).strip().replace(",", "."))
+    except ValueError:
+        return None
+
+
+def _face_set(ed, value):
+    ctypes, wintypes, u = _u32()
+    buf = ctypes.create_unicode_buffer(f"{value:g}" if isinstance(value, float) else str(value))
+    _hw_send(ed, 0x000C, 0, ctypes.cast(buf, ctypes.c_void_p).value)  # WM_SETTEXT
+
+
+def _hammer_texture_face(material, new_file, pt, face, progress):
     """Картинка -> текстура грани под курсором. Порядок важен: клик инструментом Texture
     application в режиме "Lift+Select" выделяет грань И забирает её текстуру в текущую, поэтому
-    свою текстуру выбираем ПОСЛЕ клика, а потом "Apply" (текущая текстура -> выделенные грани)
-    и "Fit" (растянуть на грань). Окна Hammer всё это время невидимы (hidden_dialogs), в конце -
-    снова Selection (окно Face Edit при этом закрывается само). -> (ok, сообщение)."""
+    свою текстуру выбираем ПОСЛЕ клика, потом поля (поворот, лайтмапа) + "Apply" (текущая
+    текстура и поля -> выделенные грани), потом масштаб (Fit / по пропорциям / свой) и
+    выравнивание. face = dict(mode, scale, align, rotate, luxel) - значения из BRUSH_*.
+    Окна Hammer всё это время невидимы (hidden_dialogs), в конце - снова Selection (окно
+    Face Edit при этом закрывается само). -> (ok, сообщение)."""
     ctypes, wintypes, u = _u32()
     pid, main = hammer_find()
     if not main:
@@ -2254,11 +2290,7 @@ def _hammer_texture_face(material, new_file, pt, fit, progress):
             hlog(f"apply: ok={ok} {msg}")
             if not ok:
                 return False, msg
-            _hw_send(page, 0x0111, FACE_APPLY, u.GetDlgItem(page, FACE_APPLY))  # BN_CLICKED "Apply"
-            time.sleep(0.15)
-            if fit:
-                _hw_send(page, 0x0111, FACE_FIT, u.GetDlgItem(page, FACE_FIT))   # BN_CLICKED "Fit"
-                time.sleep(0.15)
+            note = _face_layout(page, face)
             hlog(f"face applied, texture size now {_hw_text(u.GetDlgItem(page, FACE_TEXSIZE))!r}, "
                  f"undo={hammer_undo_text(main)!r}")
         finally:
@@ -2269,8 +2301,55 @@ def _hammer_texture_face(material, new_file, pt, fit, progress):
                 if not s or not u.IsWindowVisible(s):
                     break
                 time.sleep(0.02)
-    note = tr(", растянута на всю грань") if fit else ""
     return True, tr("текстура {material} положена на грань{note}").format(material=material, note=note)
+
+
+def _face_layout(page, face):
+    """Поля и кнопки Face Edit для выделенной грани (наша текстура уже текущая). -> приписка."""
+    ctypes, wintypes, u = _u32()
+
+    def ed(i):
+        return u.GetDlgItem(page, i)
+
+    def click(i):
+        _hw_send(page, 0x0111, i, ed(i))  # BN_CLICKED
+        time.sleep(0.15)
+
+    mode = face.get("mode", BRUSH_FITS[0])
+    if face.get("rotate", "0") in BRUSH_ROTATES:
+        _face_set(ed(FACE_ROTATION), face.get("rotate", "0"))
+    if face.get("luxel", BRUSH_LUXELS[0]) != BRUSH_LUXELS[0]:
+        _face_set(ed(FACE_LUXEL), face["luxel"])
+    click(FACE_APPLY)  # текстура + поворот + лайтмапа -> грань
+    note = ""
+    if mode == BRUSH_FITS[4]:  # масштаб Hammer: как есть, плиткой
+        pass
+    elif mode == BRUSH_FITS[3]:  # свой масштаб, знак (отражение) оставляем как был у грани
+        try:
+            v = abs(float(str(face.get("scale", "0.25")).replace(",", ".")))
+        except ValueError:
+            v = 0.25
+        for i in (FACE_SCALE_X, FACE_SCALE_Y):
+            old = _face_number(ed(i)) or 1.0
+            _face_set(ed(i), float(v if old >= 0 else -v))
+        click(FACE_APPLY)
+    else:
+        click(FACE_FIT)  # растянуть на грань: масштаб по X и Y - ровно грань
+        sx, sy = _face_number(ed(FACE_SCALE_X)), _face_number(ed(FACE_SCALE_Y))
+        hlog(f"face fit: scale {sx} x {sy}")
+        note = tr(", растянута на всю грань")
+        if mode != BRUSH_FITS[0] and sx and sy:
+            # одинаковый масштаб по обеим осям: больший - закрыть грань (края обрезаются),
+            # меньший - вписать целиком (остаток грани - повтор картинки)
+            k = max(abs(sx), abs(sy)) if mode == BRUSH_FITS[1] else min(abs(sx), abs(sy))
+            _face_set(ed(FACE_SCALE_X), float(k if sx > 0 else -k))
+            _face_set(ed(FACE_SCALE_Y), float(k if sy > 0 else -k))
+            click(FACE_APPLY)
+            note = tr(", пропорции сохранены")
+    align = face.get("align", BRUSH_ALIGNS[0])
+    if mode != BRUSH_FITS[0] and align in FACE_JUSTIFY:  # после Fit выравнивать нечего
+        click(FACE_JUSTIFY[align])
+    return note
 
 
 def _hammer_select_after_drop(pid, main, tool_id, pt, progress):
@@ -2979,7 +3058,7 @@ class App:
         self.nb = nb = TabStack(sp)  # см. TabStack: страницы не пересоздаются при переключении
         w_nb = sp.create_window(0, 0, window=nb, anchor="nw")
         self.tabs = {}
-        tab_keys = (("fav", tr("★ Избранное")), ("tex", tr("Текстура")), ("mat", tr("Материал")), ("save", tr("Сохранение")))
+        tab_keys = (("fav", tr("★ Избранное")), ("tex", tr("Текстура")), ("mat", tr("Материал")), ("save", tr("Сохранение")), ("hammer", "Hammer"))
         for i, (key, title) in enumerate(tab_keys):
             page = CanvasPage(nb.body, self)
             nb.add(page, text=title)
@@ -3015,11 +3094,21 @@ class App:
                     sp.place_button("b_tf", W - dots, y + px(1), dots, rh - px(2))
                 y += rh + px(2)
             y += px(6)
+            # вкладки в одну строку: сначала ужимаются отступы, потом (длинные языки) шрифт
+            tabs = [f"tab{i}" for i in range(len(tab_keys))]
+            for font in (sp.font, (sp.font[0], sp.font[1] - 1)):
+                for n in tabs:
+                    sp.itemconfigure(sp.buttons[n]["text"], font=font)
+                widths = [sp.text_width(n) for n in tabs]
+                pad = next((p for p in (px(20), px(14), px(8)) if sum(widths) + len(tabs) * (p + px(2)) <= W),
+                           None)
+                if pad is not None:
+                    break
+            pad = px(6) if pad is None else pad
             x = 0
-            for i in range(len(tab_keys)):
-                tw = sp.text_width(f"tab{i}") + px(20)
-                sp.place_button(f"tab{i}", x, y, tw, bh - px(2))
-                x += tw + px(2)
+            for n, tw in zip(tabs, widths):
+                sp.place_button(n, x, y, tw + pad, bh - px(2))
+                x += tw + pad + px(2)
             y += bh
             bottom = bh * 2 + px(4) + px(76)  # сводка ~4 строки + 2 ряда кнопок
             sp.coords(w_nb, 0, y + px(2))
@@ -3108,7 +3197,10 @@ class App:
                     # заполнить, не переключив шейдер, и получить VertexLitGeneric без $decalscale.
                     w = ttk.Entry(master, textvariable=self.v[key])
                     w.bind("<KeyRelease>", lambda e: self.refresh())
-                    self.decal_entries.append(w)
+                    if key == "decal_units":
+                        self.decal_entries.append(w)
+                    else:
+                        w.bind("<FocusOut>", lambda e: self.save_settings())
                 else:
                     w = self.value_combo(master, key, values)
                 return w
@@ -4202,11 +4294,11 @@ class App:
         self.hammer_busy = True
         self.last_save_text = text
         self.set_status(tr("{text}. Ставлю в Hammer...").format(text=text))
-        fit = bool(self.v["brush_fit"].get())
+        face = {k: self.v["brush_" + k].get() for k in ("mode", "scale", "align", "rotate", "luxel")}
 
         def work():
             try:
-                ok, msg = hammer_place(mat, new_file, tool, pt, fit=fit,
+                ok, msg = hammer_place(mat, new_file, tool, pt, face=face,
                                        progress=lambda s: self.jobs.put(("toast", s, False)))
             except Exception as ex:
                 ok, msg = False, tr("ошибка: {ex}").format(ex=ex)

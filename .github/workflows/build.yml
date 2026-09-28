@@ -1,0 +1,85 @@
+# Builds clip2vtf.exe on GitHub (the build SignPath signs), with a PyInstaller bootloader compiled
+# from source instead of the prebuilt one antivirus heuristics often flag.
+# - every push / pull request: build + self-test, the exe is kept as a workflow artifact
+# - a tag "v*": the same, then signing through SignPath (once it is set up, see SIGNING.md)
+#   and a GitHub release with the (signed) exe
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write   # creating the release on a tag
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies, PyInstaller with a freshly compiled bootloader
+        shell: pwsh
+        env:
+          PYINSTALLER_COMPILE_BOOTLOADER: "1"
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install --no-binary pyinstaller "pyinstaller==6.22.2"
+
+      - name: Check translations
+        run: python check_translations.py
+
+      - name: Build clip2vtf.exe
+        run: python -m PyInstaller --noconfirm clip2vtf.spec
+
+      - name: Self-test the exe
+        shell: pwsh
+        run: |
+          Start-Process dist\clip2vtf.exe -ArgumentList '--selftest','dist\selftest.txt' -Wait
+          Get-Content dist\selftest.txt
+          $t = Get-Content dist\selftest.txt -Raw
+          # no TF2 on the runner, so the vtf2tga part is skipped; the rest must pass
+          if ($t -notmatch 'cython_libsquish=True' -or $t -notmatch 'tkdnd=ok' -or $t -notmatch '(?m)^OK') { exit 1 }
+
+      - name: Upload the unsigned exe
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: clip2vtf-unsigned
+          path: dist/clip2vtf.exe
+          if-no-files-found: error
+
+      # Runs only after SignPath is configured: repository variable SIGNPATH_ORGANIZATION_ID and
+      # secret SIGNPATH_API_TOKEN (see SIGNING.md). Until then releases are unsigned.
+      - name: Sign with SignPath
+        if: startsWith(github.ref, 'refs/tags/v') && vars.SIGNPATH_ORGANIZATION_ID != ''
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: clip2vtf
+          signing-policy-slug: release-signing
+          artifact-configuration-slug: exe
+          github-artifact-id: ${{ steps.upload.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $exe = if (Test-Path signed\clip2vtf.exe) { "signed\clip2vtf.exe" } else { "dist\clip2vtf.exe" }
+          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash
+          $signed = if ($exe -like "signed*") { "Signed by SignPath Foundation." } else { "Not code-signed yet." }
+          gh release create "$env:GITHUB_REF_NAME" "$exe" --title "clip2vtf $($env:GITHUB_REF_NAME.TrimStart('v'))" `
+            --notes "Built by GitHub Actions from this tag. $signed SHA-256 ``$hash``" --verify-tag

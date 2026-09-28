@@ -35,7 +35,7 @@ Drop it on a wall and pick what it becomes (menu **Hammer mode**):
 | Mode | What happens |
 | --- | --- |
 | **Decal** | Apply decals tool + click: an `infodecal` with the size from the settings. The new decal is selected. |
-| **Brush texture** | The face under the cursor gets the picture as its texture, optionally stretched over the whole face (Fit). |
+| **Brush texture** | The face under the cursor gets the picture as its texture: stretched over the face (Fit), filling it or fitting it with proportions kept, a custom scale or Hammer's own; plus alignment, rotation and lightmap scale. |
 | **Overlay** | Apply overlays tool + click: an `info_overlay` you can stretch by its corners. |
 
 After placing, the Selection tool is switched back on, and Ctrl+Z in Hammer undoes it.
@@ -61,7 +61,9 @@ The language follows Windows; change it in the **Language** menu.
 Requirements: Windows 10/11, Team Fortress 2 installed through Steam (found automatically; its
 `bin\vtf2tga.exe` is used for the check). Hammer++ is only needed for the Hammer features.
 
-The exe is not code-signed, so Windows SmartScreen may warn on the first start ("More info" → "Run anyway").
+The exe is not code-signed yet (signing through SignPath Foundation is being set up, see [SIGNING.md](SIGNING.md)),
+so Windows SmartScreen may warn on the first start ("More info" → "Run anyway"). Releases are built by GitHub
+Actions from the tagged source, with a PyInstaller bootloader compiled from source.
 
 ## Run from source
 
@@ -90,6 +92,12 @@ strings, broken `{placeholders}`, lost line breaks, hotkeys and technical tokens
 - If a Hammer++ update changes its dialogs, the Hammer features may stop working; the file
   `clip2vtf_hammer.log` next to the program shows every step. Technical details: [NOTES.md](NOTES.md).
 - Tested with the Hammer++ build from September 2026 (64-bit) and TF2.
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by
+[SignPath Foundation](https://signpath.org) (once approved). Details, team roles and the privacy note:
+[SIGNING.md](SIGNING.md).
 
 ## License
 
