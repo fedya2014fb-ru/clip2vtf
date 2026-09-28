@@ -294,6 +294,8 @@ DEFAULTS = {
     "brush_rotate": "0",
     "brush_luxel": "не менять",
     # режим "табличка на стену"
+    "sign_size": "По размеру картинки",
+    "sign_px": "0.25",   # юнитов на пиксель: 0.25 - плотность стандартных текстур Hammer
     "sign_width": "128",
     "sign_depth": "8",
     "sign_sides": "nodraw (невидимые)",
@@ -467,6 +469,8 @@ BRUSH_ROTATES = ["0", "90", "180", "270"]
 BRUSH_LUXELS = ["не менять", "4", "8", "16", "32", "64"]
 # Режим "табличка": чем покрыть грани таблички, кроме лицевой.
 SIGN_SIDES = ["nodraw (невидимые)", "Текущая текстура Hammer", "Свой материал"]
+# Размер таблички: по пикселям картинки (x юнитов на пиксель) или заданной ширины.
+SIGN_SIZES = ["По размеру картинки", "Своя ширина"]
 HAMMER_TOOL = {HAMMER_MODES[0]: TOOL_DECAL, HAMMER_MODES[1]: TOOL_FACE, HAMMER_MODES[2]: TOOL_OVERLAY,
                HAMMER_MODES[3]: TOOL_SIGN}
 
@@ -485,6 +489,8 @@ FIELD_DEFS = {  # ключ -> (подпись, значения списка; No
     "brush_align": (tr("Выравнивание:"), BRUSH_ALIGNS),
     "brush_rotate": (tr("Поворот, градусы:"), BRUSH_ROTATES),
     "brush_luxel": (tr("Лайтмапа (luxel):"), BRUSH_LUXELS),
+    "sign_size": (tr("Размер таблички:"), SIGN_SIZES),
+    "sign_px": (tr("Юнитов на пиксель:"), None),
     "sign_width": (tr("Табличка: ширина,\nюнитов:"), None),
     "sign_depth": (tr("Табличка: толщина,\nюнитов:"), None),
     "sign_sides": (tr("Остальные грани:"), SIGN_SIDES),
@@ -517,7 +523,7 @@ TAB_LAYOUT = {
                         "высота - по её пропорциям. Остальные грани: nodraw (их не видно, как и "
                         "положено у таблички на стене), текущая текстура Hammer или свой материал - "
                         "его можно выбрать в браузере текстур Hammer кнопкой ниже.")),
-               "sign_width", "sign_depth", "sign_sides", "sign_material"],
+               "sign_size", "sign_px", "sign_width", "sign_depth", "sign_sides", "sign_material"],
     "save": [k for k, _, _ in SAVE_CHECKS if k not in ("hammer_drop", "size_panel", "send_hammer")],
 }
 ALL_SETTINGS = [k for items in TAB_LAYOUT.values() for k in items if isinstance(k, str)]
@@ -2579,9 +2585,11 @@ def _vmf_side(i, pts, mat, uax, vax):
             '\t\t\t"rotation" "0"\n\t\t\t"lightmapscale" "16"\n\t\t\t"smoothing_groups" "0"\n\t\t}\n')
 
 
-def sign_prefab_vmf(center, n, width, height, depth, front_mat, tex_w, tex_h, side_mat):
+def sign_prefab_vmf(center, n, width, height, depth, front_mat, tex_w, tex_h, side_mat, uv=None):
     """VMF префаба: ящик width x height x depth с центром center (локальные координаты),
-    лицевая грань смотрит по n, на ней картинка ровно от угла до угла; остальные - side_mat."""
+    лицевая грань смотрит по n, на ней ровно прямоугольник текстуры uv = (x, y, w, h) в текселях
+    (по умолчанию вся текстура); остальные грани - side_mat."""
+    ux, uy, uw, uh = uv or (0, 0, tex_w, tex_h)
     right = _v_cross(_v_mul(n, -1), [0, 0, 1])
     if _v_dot(right, right) < 1e-6:  # пол/потолок: "право" - ось X
         right = [1.0, 0.0, 0.0]
@@ -2604,11 +2612,11 @@ def sign_prefab_vmf(center, n, width, height, depth, front_mat, tex_w, tex_h, si
         if _v_dot(_v_cross(_v_sub(b, a), _v_sub(c, a)), N) > 0:
             b, c = c, b
         if i == 0:
-            su, sv = width / tex_w, height / tex_h
+            su, sv = width / uw, height / uh
             va = _v_mul(up, -1)
-            corner = P(-1, 1, 1)  # левый верхний угол лица = пиксель (0, 0)
-            uax = f"[{g(right)} {-_v_dot(corner, right) / su:.4f}] {su:.6g}"
-            vax = f"[{g(va)} {-_v_dot(corner, va) / sv:.4f}] {sv:.6g}"
+            corner = P(-1, 1, 1)  # левый верхний угол лица = тексель (ux, uy)
+            uax = f"[{g(right)} {ux - _v_dot(corner, right) / su:.4f}] {su:.6g}"
+            vax = f"[{g(va)} {uy - _v_dot(corner, va) / sv:.4f}] {sv:.6g}"
             mat = front_mat
         else:
             if abs(N[2]) > 0.7:
@@ -2684,7 +2692,7 @@ def hammer_place_sign(material, new_file, pt, sign, progress=lambda s: None):
                         pass
             with open(os.path.join(folder, name + ".vmf"), "w", encoding="utf-8", newline="\n") as f:
                 f.write(sign_prefab_vmf(center, n, width, height, depth, material, sign["tex_w"],
-                                        sign["tex_h"], side_mat))
+                                        sign["tex_h"], side_mat, sign.get("uv")))
             hlog(f"sign: {width:g}x{height:g}x{depth:g} at {o} n={n} sides={side_mat!r}")
             # 4. Entity + наш префаб, привязка выключена, клик в ту же точку
             progress(tr("ставлю табличку..."))
@@ -4656,12 +4664,17 @@ class App:
         sign = None
         if tool == TOOL_SIGN:
             tw, th = self.result.size
-            # "Растянуть": в текстуре картинка растянута до степени двойки - пропорции таблички
-            # берутся от самой картинки; при полях/обрезке - от текстуры (картинка в ней с полями)
-            if self.v["fit"].get().startswith("Растянуть"):
-                pw, ph = self.prepared().size
-            else:
-                pw, ph = tw, th
+            pw, ph = self.prepared().size  # картинка после обрезки полей, в исходных пикселях
+            fit = self.v["fit"].get()
+            uv = (0, 0, tw, th)  # "Растянуть": вся текстура = вся картинка
+            if fit.startswith("Вписать"):
+                # в текстуре картинка с прозрачными полями (как в fit_resize) - на табличку
+                # идёт только сама картинка, без полей
+                k = min(tw / pw, th / ph)
+                nw, nh = max(1, round(pw * k)), max(1, round(ph * k))
+                uv = ((tw - nw) // 2, (th - nh) // 2, nw, nh)
+            elif not fit.startswith("Растянуть"):
+                pw, ph = tw, th  # "Обрезать по центру": видна текстура целиком, её пропорции
 
             def num(key, default):
                 try:
@@ -4669,7 +4682,13 @@ class App:
                     return v if v > 0 else default
                 except ValueError:
                     return default
-            sign = dict(width=num("sign_width", 128.0), depth=num("sign_depth", 8.0), ratio=ph / pw,
+            if self.v["sign_size"].get() == SIGN_SIZES[0]:
+                # по картинке: её пиксели (после обрезки полей, до подгонки под степень двойки)
+                # x масштаб - та же плотность, что у текстур вокруг при 0.25
+                width = self.prepared().size[0] * num("sign_px", 0.25)
+            else:
+                width = num("sign_width", 128.0)
+            sign = dict(width=width, depth=num("sign_depth", 8.0), ratio=ph / pw, uv=uv,
                         tex_w=tw, tex_h=th, sides=self.v["sign_sides"].get(),
                         custom=self.v["sign_material"].get().strip())
 
