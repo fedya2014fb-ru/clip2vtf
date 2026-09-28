@@ -47,6 +47,22 @@ Hammer has no plugin API. Everything goes through window messages from a backgro
 - **Face Edit Sheet** (Texture application tool), page with Apply 1015 and Fit 1406. A click in
   "Lift+Select" mode selects the face *and* lifts its texture into the current one, so the new texture is
   chosen after the click, then Apply, then Fit.
+- **Sign mode (a brush flush against the wall)**, all measured live:
+  - the wall point and normal come from a probe `info_overlay`: Hammer fills its read-only
+    "Overlay Basis Origin / Normal" keys (Object Properties → Class Info); the probe is undone;
+  - the sign is written as a prefab into `PrefabDir` (from `hammerplusplus_gameconfig.txt`) under a
+    `clip2vtf` sub-folder. Hammer++ rescans that folder **only when its window gets activated**, so
+    after writing the file Hammer is deactivated and activated again;
+  - Entity tool (32816) + category/object picked in the "New Objects" bar (combos 1010 / 1007) + a click
+    in the 3D view puts the prefab's origin at the clicked point. With Snap to Grid (menu id **32863**,
+    not 32853) x and y are rounded to 32 units at grid 64; without it to whole units, z untouched.
+    Snap is switched off for the click and restored, and the prefab is built relative to
+    `(round(x), round(y), z)`;
+  - textures move with the brush on insertion regardless of Texture Lock (32956), so the front-face
+    UV is computed in the prefab's local coordinates;
+  - Transform → Teleport did not move the selection when driven from outside, and "Insert original
+    prefab" (1219) inserts at the marker, not at the file's coordinates - neither is used;
+  - plane winding: `(b - a) × (c - a)` points into the brush.
 - **No flicker**: an out-of-context `SetWinEventHook` (`EVENT_OBJECT_CREATE..SHOW`) makes every top-level
   window Hammer creates during an operation layered + alpha 0 + click-through, and restores the original
   styles afterwards. Restoring is required: Hammer reuses its dialogs.

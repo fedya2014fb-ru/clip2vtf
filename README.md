@@ -37,6 +37,7 @@ Drop it on a wall and pick what it becomes (menu **Hammer mode**):
 | **Decal** | Apply decals tool + click: an `infodecal` with the size from the settings. The new decal is selected. |
 | **Brush texture** | The face under the cursor gets the picture as its texture: stretched over the face (Fit), filling it or fitting it with proportions kept, a custom scale or Hammer's own; plus alignment, rotation and lightmap scale. |
 | **Overlay** | Apply overlays tool + click: an `info_overlay` you can stretch by its corners. |
+| **Sign on the wall** | A brush of the given width and thickness is built and placed flush against the wall: the picture on its front face (height from the picture's proportions), the other faces `nodraw`, Hammer's current texture or a material picked in Hammer's texture browser. |
 
 After placing, the Selection tool is switched back on, and Ctrl+Z in Hammer undoes it.
 
@@ -111,7 +112,8 @@ MIT, see [LICENSE](LICENSE). Bundled third-party components: [THIRD_PARTY.md](TH
 
 Скопируй картинку в браузере и нажми Ctrl+V или перетащи её в окно — clip2vtf запишет правильные
 `.vtf` + `.vmt`. А если перетащить картинку прямо на Hammer++, она окажется на стене, над которой её
-отпустили: декалью, текстурой грани браша или оверлеем (меню **Режим Hammer**).
+отпустили: декалью, текстурой грани браша, оверлеем или табличкой-брашем вплотную к стене
+(меню **Режим Hammer**).
 
 - Картинка из буфера, из Проводника, прямо из браузера или по ссылке; имя подставляется само.
 - VTF всегда версии 7.2, размеры — степени двойки, каждый файл проверяется декодером Valve (vtf2tga).

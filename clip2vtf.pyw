@@ -293,6 +293,11 @@ DEFAULTS = {
     "brush_align": "По центру",
     "brush_rotate": "0",
     "brush_luxel": "не менять",
+    # режим "табличка на стену"
+    "sign_width": "128",
+    "sign_depth": "8",
+    "sign_sides": "nodraw (невидимые)",
+    "sign_material": "",
     "hammer_opts_open": True,  # раскрыты ли настройки на панели поверх Hammer
     "lang": LANG,              # язык интерфейса (см. LANGUAGES), по умолчанию - язык Windows
     "hammer_mode": "Декаль (размер из настройки)",  # Apply decals - так попросил пользователь
@@ -451,15 +456,19 @@ ALPHA_MODES = ["Авто", "Нет", "$translucent", "$alphatest"]
 # (и по желанию растягивается на неё кнопкой Fit окна Face Edit, см. _hammer_texture_face).
 # Внутренние значения - как в сохранённых настройках; новый режим вставлен в середину списка.
 HAMMER_MODES = ["Декаль (размер из настройки)", "Текстура на браш (грань под курсором)",
-                "Оверлей (растягивается мышью)"]
+                "Оверлей (растягивается мышью)", "Табличка на стену (браш с картинкой)"]
 TOOL_DECAL, TOOL_FACE, TOOL_OVERLAY = 33008, 32913, 33107
+TOOL_SIGN = 1  # не инструмент Hammer: табличка ставится префабом (hammer_place_sign)
 # Режим "текстура на браш": как положить картинку на грань (окно Face Edit Hammer).
 BRUSH_FITS = ["Растянуть на всю грань (Fit)", "Заполнить грань, сохранив пропорции",
               "Вписать целиком, сохранив пропорции", "Свой масштаб", "Масштаб Hammer (плиткой)"]
 BRUSH_ALIGNS = ["По центру", "Как есть", "Влево", "Вправо", "Вверх", "Вниз"]
 BRUSH_ROTATES = ["0", "90", "180", "270"]
 BRUSH_LUXELS = ["не менять", "4", "8", "16", "32", "64"]
-HAMMER_TOOL = {HAMMER_MODES[0]: TOOL_DECAL, HAMMER_MODES[1]: TOOL_FACE, HAMMER_MODES[2]: TOOL_OVERLAY}
+# Режим "табличка": чем покрыть грани таблички, кроме лицевой.
+SIGN_SIDES = ["nodraw (невидимые)", "Текущая текстура Hammer", "Свой материал"]
+HAMMER_TOOL = {HAMMER_MODES[0]: TOOL_DECAL, HAMMER_MODES[1]: TOOL_FACE, HAMMER_MODES[2]: TOOL_OVERLAY,
+               HAMMER_MODES[3]: TOOL_SIGN}
 
 # Раскладка вкладок. Строка = ключ настройки, кортеж ("note", текст) = пояснение.
 FIELD_DEFS = {  # ключ -> (подпись, значения списка; None = поле ввода)
@@ -476,6 +485,10 @@ FIELD_DEFS = {  # ключ -> (подпись, значения списка; No
     "brush_align": (tr("Выравнивание:"), BRUSH_ALIGNS),
     "brush_rotate": (tr("Поворот, градусы:"), BRUSH_ROTATES),
     "brush_luxel": (tr("Лайтмапа (luxel):"), BRUSH_LUXELS),
+    "sign_width": (tr("Табличка: ширина,\nюнитов:"), None),
+    "sign_depth": (tr("Табличка: толщина,\nюнитов:"), None),
+    "sign_sides": (tr("Остальные грани:"), SIGN_SIDES),
+    "sign_material": (tr("Свой материал:"), None),
 }
 CHECK_DEFS = {k: (t, d) for k, t, d in TEXTURE_CHECKS + MATERIAL_CHECKS + SAVE_CHECKS}
 TAB_LAYOUT = {
@@ -498,7 +511,13 @@ TAB_LAYOUT = {
                         "картинка не поместится (остаток грани заполнится её повтором). Свой масштаб: "
                         "0.25 - как у стандартных текстур, 1 - один пиксель на юнит. Лайтмапа: меньше "
                         "число - чётче тени на картинке, но дороже для карты (по умолчанию 16).")),
-               "brush_mode", "brush_scale", "brush_align", "brush_rotate", "brush_luxel"],
+               "brush_mode", "brush_scale", "brush_align", "brush_rotate", "brush_luxel",
+               ("note", tr("Табличка на стену: программа сама делает браш нужного размера и ставит его "
+                        "вплотную к стене, над которой отпустил картинку. Картинка - на лицевой грани, "
+                        "высота - по её пропорциям. Остальные грани: nodraw (их не видно, как и "
+                        "положено у таблички на стене), текущая текстура Hammer или свой материал - "
+                        "его можно выбрать в браузере текстур Hammer кнопкой ниже.")),
+               "sign_width", "sign_depth", "sign_sides", "sign_material"],
     "save": [k for k, _, _ in SAVE_CHECKS if k not in ("hammer_drop", "size_panel", "send_hammer")],
 }
 ALL_SETTINGS = [k for items in TAB_LAYOUT.values() for k in items if isinstance(k, str)]
@@ -1818,7 +1837,7 @@ class RemoteMem:
             self.hp = None
 
 
-def hammer_selection_text(main, rm, cache={}):
+def hammer_selection_text(main, rm, cache={}, part=1):
     """Вторая ячейка строки статуса Hammer - что выделено: "infodecal  [ID: 5371337] [dist: 79.5]"
     (прочитано вживую). SB_GETTEXTW - в буфер внутри Hammer (RemoteMem)."""
     ctypes, wintypes, u = _u32()
@@ -1830,7 +1849,7 @@ def hammer_selection_text(main, rm, cache={}):
     if not sb:
         return ""
     rm.write(b"\0\0")
-    if _hw_send(sb, 0x040D, 1, rm.addr, timeout=500) is None:  # SB_GETTEXTW(part 1)
+    if _hw_send(sb, 0x040D, part, rm.addr, timeout=500) is None:  # SB_GETTEXTW(part); 5 - "Snap: On Grid: 64"
         return ""
     return rm.wstr(0, 1024)
 
@@ -2198,7 +2217,7 @@ def wait_mouse_released(limit=15.0):
     return not lbutton_down()
 
 
-def hammer_place(material, new_file, tool_id, pt, progress=lambda s: None, face=None):
+def hammer_place(material, new_file, tool_id, pt, progress=lambda s: None, face=None, sign=None):
     """Перетащенная в Hammer картинка -> на стену: текстура текущая, инструмент оверлеев/декалей,
     клик в точку отпускания. Кликает сам Hammer-инструмент, так что это то же самое, что сделал
     бы маппер рукой (и Ctrl+Z его отменяет). Вызывается из фонового потока.
@@ -2206,8 +2225,11 @@ def hammer_place(material, new_file, tool_id, pt, progress=lambda s: None, face=
     ctypes, wintypes, u = _u32()
     t0 = time.time()
     hlog(f"--- drop {material} new={new_file} tool={tool_id} pt={pt} face={face}")
-    if tool_id == TOOL_FACE:
-        ok, msg = _hammer_texture_face(material, new_file, pt, face or {}, progress)
+    if tool_id in (TOOL_FACE, TOOL_SIGN):
+        if tool_id == TOOL_FACE:
+            ok, msg = _hammer_texture_face(material, new_file, pt, face or {}, progress)
+        else:
+            ok, msg = hammer_place_sign(material, new_file, pt, sign or {}, progress)
         hlog(f"done ok={ok} ({time.time() - t0:.1f}s) {msg}")
         return ok, msg
     progress(tr("выбираю текстуру в Hammer..."))
@@ -2390,6 +2412,331 @@ def _hammer_select_after_drop(pid, main, tool_id, pt, progress):
         return tr(" (выделилась не декаль - кликни по ней)")
     finally:
         rm.close()
+
+
+# ---------------------------------------------------------------- табличка на стену (браш-префаб)
+# Всё проверено на живом Hammer++ (сентябрь 2026) на пустой тестовой карте:
+# - Hammer++ следит за папкой префабов (PrefabDir из hammerplusplus_gameconfig.txt), но
+#   перечитывает её, только когда его окно АКТИВИРУЕТСЯ - поэтому после записи файла Hammer
+#   деактивируется и активируется снова (_hw_reactivate).
+# - Точку на стене и её нормаль даёт пробный info_overlay: Hammer сам пишет в него
+#   "Overlay Basis Origin/Normal" (Object Properties -> Class Info). Потом Undo.
+# - Инструмент Entity + префаб + клик в 3D-виде: начало координат префаба встаёт в точку клика.
+#   С "Snap to Grid" x и y округляются к шагу 32 (при сетке 64), без неё - к целым юнитам,
+#   z не трогается. Поэтому на время вставки привязка выключается (команда 32863), а префаб
+#   строится относительно (round(x), round(y), z) - позиция выходит точной.
+# - Текстура едет вместе с брашем при вставке при ЛЮБОМ Texture Lock (проверено с обоими),
+#   значит привязку текстуры в файле можно считать в тех же локальных координатах.
+# - Transform -> Teleport из скрипта не двигает выделение (проверено дважды) - не используется.
+# - "Insert original prefab" (1219) ставит префаб в маркер, а не в его координаты из файла.
+ID_ENTITY_TOOL, ID_SNAP_GRID, ID_OVERLAY_TOOL, ID_PROPERTIES, ID_UNDO = 32816, 32863, 33107, 32819, 57643
+OBJBAR_CATEGORY, OBJBAR_OBJECT = 1010, 1007  # панель "New Objects" инструмента Entity
+SIGN_CATEGORY = "clip2vtf"                   # подпапка в папке префабов = категория в списке
+NODRAW = "TOOLS/TOOLSNODRAW"
+
+
+def _v_add(a, b): return [a[i] + b[i] for i in range(3)]
+def _v_sub(a, b): return [a[i] - b[i] for i in range(3)]
+def _v_mul(a, k): return [x * k for x in a]
+def _v_dot(a, b): return sum(a[i] * b[i] for i in range(3))
+def _v_cross(a, b): return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+
+
+def _v_norm(a):
+    ln = math.sqrt(_v_dot(a, a)) or 1.0
+    return [x / ln for x in a]
+
+
+def _hw_exe_path(pid):
+    ctypes, wintypes, u = _u32()
+    k = ctypes.windll.kernel32
+    k.OpenProcess.restype = wintypes.HANDLE
+    h = k.OpenProcess(0x1000, False, pid)
+    if not h:
+        return ""
+    try:
+        b = ctypes.create_unicode_buffer(1024)
+        n = wintypes.DWORD(1024)
+        k.QueryFullProcessImageNameW(h, 0, b, ctypes.byref(n))
+        return b.value
+    finally:
+        k.CloseHandle(h)
+
+
+def hammer_prefab_dir(pid):
+    """PrefabDir из конфига Hammer++ (рядом с exe), иначе <папка exe>/Prefabs."""
+    exe_dir = os.path.dirname(_hw_exe_path(pid))
+    for cfg in (os.path.join(exe_dir, "hammerplusplus", "hammerplusplus_gameconfig.txt"),
+                os.path.join(exe_dir, "hammerplusplus_gameconfig.txt")):
+        try:
+            with open(cfg, encoding="utf-8", errors="replace") as f:
+                m = re.search(r'"PrefabDir"\s+"([^"]+)"', f.read())
+            if m:
+                return m.group(1)
+        except OSError:
+            pass
+    return os.path.join(exe_dir, "Prefabs") if exe_dir else ""
+
+
+def _hw_reactivate(main):
+    """Отдать фокус панели задач и вернуть Hammer: так он перечитывает папку префабов."""
+    ctypes, wintypes, u = _u32()
+    tray = u.FindWindowW("Shell_TrayWnd", None)
+    if tray:
+        _hw_foreground(tray)
+        time.sleep(0.2)
+    _hw_foreground(main)
+    time.sleep(0.3)
+
+
+def hammer_current_texture(pid, main):
+    """Имя текущей текстуры Hammer: браузер текстур при открытии выделяет её (поле 1267).
+    Заодно Hammer узнаёт о новых материалах на диске. -> имя или ''."""
+    dlg, _ = _hw_open_browser(pid, main)
+    if not dlg:
+        return ""
+    ctypes, wintypes, u = _u32()
+    time.sleep(0.2)
+    name = _hw_text(u.GetDlgItem(dlg, 1267)).strip()
+    _hw_close_browser(pid, dlg)
+    return name
+
+
+def _object_properties_rows(pid, main, rm):
+    """{ключ: значение} выделенного объекта из Object Properties -> Class Info."""
+    ctypes, wintypes, u = _u32()
+
+    def find():
+        return next((h for h in _hw_windows(pid=pid) if _hw_text(h).startswith("Object Properties")), None)
+    dlg, opened = find(), False
+    if not dlg:
+        u.PostMessageW(main, 0x0111, ID_PROPERTIES, 0)
+        opened = True
+        t0 = time.time()
+        while not dlg and time.time() - t0 < 5:
+            time.sleep(0.03)
+            dlg = find()
+    if not dlg:
+        return {}
+    try:
+        page = next((c for c in _hw_windows(parent=dlg) if _hw_text(c) == "Class Info"), None)
+        lv = u.GetDlgItem(page, 1024) if page else None
+        rows = {}
+        t0 = time.time()
+        while lv and time.time() - t0 < 2:  # список заполняется не сразу
+            rows = dict(_lv_rows(lv, rm))
+            if any(k.startswith("Overlay Basis Origin") for k in rows):
+                break
+            time.sleep(0.1)
+        return rows
+    finally:
+        if opened:
+            u.PostMessageW(dlg, 0x0111, 2, 0)
+            t0 = time.time()
+            while u.IsWindow(dlg) and u.IsWindowVisible(dlg) and time.time() - t0 < 2:
+                time.sleep(0.02)
+
+
+def hammer_probe_surface(pid, main, pt, progress=lambda s: None):
+    """Точка на стене под pt и нормаль: пробный info_overlay (инструмент оверлеев + клик),
+    чтение его Basis Origin/Normal, Undo. -> (origin, normal) или (None, сообщение)."""
+    ctypes, wintypes, u = _u32()
+    ok, msg = _hammer_click_at(pid, main, ID_OVERLAY_TOOL, pt, progress, "")
+    if not ok:
+        return None, msg.lstrip(". ")
+    time.sleep(0.3)
+    undo = hammer_undo_text(main)
+    if undo != "Undo Create Overlay":
+        hlog(f"probe: no overlay created (undo={undo!r})")
+        return None, tr("не удалось определить стену под курсором")
+    rm = RemoteMem(pid, 16384)
+    try:
+        rows = _object_properties_rows(pid, main, rm)
+    finally:
+        rm.close()
+    if hammer_undo_text(main) == "Undo Create Overlay":  # убрать пробу - и только её
+        _hw_send(main, 0x0111, ID_UNDO, 0)
+        time.sleep(0.2)
+
+    def vec(prefix):
+        v = next((val for k, val in rows.items() if k.startswith(prefix)), "")
+        try:
+            return [float(x) for x in v.split()][:3]
+        except ValueError:
+            return None
+    o, n = vec("Overlay Basis Origin"), vec("Overlay Basis Normal")
+    hlog(f"probe: origin={o} normal={n}")
+    if not o or not n or len(o) < 3 or len(n) < 3:
+        return None, tr("не удалось определить стену под курсором")
+    return o, _v_norm(n)
+
+
+def _vmf_side(i, pts, mat, uax, vax):
+    f = lambda p: "(" + " ".join(f"{x:.4f}".rstrip("0").rstrip(".") for x in p) + ")"
+    return ('\t\tside\n\t\t{\n'
+            f'\t\t\t"id" "{i}"\n\t\t\t"plane" "{f(pts[0])} {f(pts[1])} {f(pts[2])}"\n'
+            f'\t\t\t"material" "{mat}"\n\t\t\t"uaxis" "{uax}"\n\t\t\t"vaxis" "{vax}"\n'
+            '\t\t\t"rotation" "0"\n\t\t\t"lightmapscale" "16"\n\t\t\t"smoothing_groups" "0"\n\t\t}\n')
+
+
+def sign_prefab_vmf(center, n, width, height, depth, front_mat, tex_w, tex_h, side_mat):
+    """VMF префаба: ящик width x height x depth с центром center (локальные координаты),
+    лицевая грань смотрит по n, на ней картинка ровно от угла до угла; остальные - side_mat."""
+    right = _v_cross(_v_mul(n, -1), [0, 0, 1])
+    if _v_dot(right, right) < 1e-6:  # пол/потолок: "право" - ось X
+        right = [1.0, 0.0, 0.0]
+    right = _v_norm(right)
+    up = _v_cross(right, _v_mul(n, -1))
+    hw, hh, hd = width / 2, height / 2, depth / 2
+
+    def P(a, b, c):
+        return _v_add(_v_add(_v_add(center, _v_mul(right, a * hw)), _v_mul(up, b * hh)), _v_mul(n, c * hd))
+    faces = [(n, [P(-1, 1, 1), P(1, 1, 1), P(1, -1, 1)]),
+             (_v_mul(n, -1), [P(1, 1, -1), P(-1, 1, -1), P(-1, -1, -1)]),
+             (right, [P(1, 1, 1), P(1, 1, -1), P(1, -1, -1)]),
+             (_v_mul(right, -1), [P(-1, 1, -1), P(-1, 1, 1), P(-1, -1, 1)]),
+             (up, [P(-1, 1, -1), P(1, 1, -1), P(1, 1, 1)]),
+             (_v_mul(up, -1), [P(-1, -1, 1), P(1, -1, 1), P(1, -1, -1)])]
+    g = lambda v: " ".join(f"{x:.6g}" for x in v)
+    sides = ""
+    for i, (N, (a, b, c)) in enumerate(faces):
+        # Hammer: векторное произведение (b-a) x (c-a) смотрит ВНУТРЬ браша
+        if _v_dot(_v_cross(_v_sub(b, a), _v_sub(c, a)), N) > 0:
+            b, c = c, b
+        if i == 0:
+            su, sv = width / tex_w, height / tex_h
+            va = _v_mul(up, -1)
+            corner = P(-1, 1, 1)  # левый верхний угол лица = пиксель (0, 0)
+            uax = f"[{g(right)} {-_v_dot(corner, right) / su:.4f}] {su:.6g}"
+            vax = f"[{g(va)} {-_v_dot(corner, va) / sv:.4f}] {sv:.6g}"
+            mat = front_mat
+        else:
+            if abs(N[2]) > 0.7:
+                uax, vax = "[1 0 0 0] 0.25", "[0 -1 0 0] 0.25"
+            else:
+                h = _v_norm(_v_cross([0, 0, 1], N))
+                uax, vax = f"[{g(h)} 0] 0.25", "[0 0 -1 0] 0.25"
+            mat = side_mat
+        sides += _vmf_side(i + 1, (a, b, c), mat, uax, vax)
+    return ('versioninfo\n{\n\t"editorversion" "400"\n\t"editorbuild" "8864"\n\t"mapversion" "1"\n'
+            '\t"formatversion" "100"\n\t"prefab" "1"\n}\nworld\n{\n\t"id" "1"\n\t"mapversion" "1"\n'
+            '\t"classname" "worldspawn"\n\tsolid\n\t{\n\t\t"id" "2"\n' + sides + '\t}\n}\n')
+
+
+def _combo_pick(bar, cid, text, wait=4.0):
+    """Выбрать строку text в выпадающем списке панели (CB_FINDSTRINGEXACT + CBN_SELCHANGE)."""
+    ctypes, wintypes, u = _u32()
+    cb = u.GetDlgItem(bar, cid)
+    buf = ctypes.create_unicode_buffer(text)
+    t0 = time.time()
+    while time.time() - t0 < wait:
+        i = _hw_send(cb, 0x0158, 0xFFFFFFFFFFFFFFFF, ctypes.cast(buf, ctypes.c_void_p).value)  # CB_FINDSTRINGEXACT
+        if i is not None and i < 100000:
+            _hw_send(cb, 0x014E, i, 0)  # CB_SETCURSEL
+            _hw_send(bar, 0x0111, (1 << 16) | cid, cb)  # CBN_SELCHANGE
+            return True
+        time.sleep(0.2)
+    return False
+
+
+def hammer_place_sign(material, new_file, pt, sign, progress=lambda s: None):
+    """Картинка -> табличка-браш вплотную к стене под pt. sign = dict(width, depth, ratio,
+    tex_w, tex_h, sides, custom). Один шаг истории Hammer "New Prefab". -> (ok, сообщение)."""
+    ctypes, wintypes, u = _u32()
+    pid, main = hammer_find()
+    if not main:
+        return False, tr("Hammer++ не запущен")
+    prefab_dir = hammer_prefab_dir(pid)
+    if not prefab_dir:
+        return False, tr("не нашёл папку префабов Hammer")
+    rm = RemoteMem(pid, 4096)
+    snap_was_on = False
+    try:
+        with hidden_dialogs(pid, main):
+            # 1. браузер текстур: Hammer узнаёт новый материал; текущая текстура - для граней
+            progress(tr("выбираю текстуру в Hammer..."))
+            if new_file:  # как в hammer_apply: материал, созданный после открытия браузера
+                b, _ = _hw_open_browser(pid, main)
+                if b:
+                    _hw_close_browser(pid, b)
+            current = hammer_current_texture(pid, main)
+            side_mat = {SIGN_SIDES[1]: current, SIGN_SIDES[2]: sign.get("custom", "")}.get(
+                sign.get("sides"), NODRAW) or NODRAW
+            # 2. стена под курсором
+            progress(tr("смотрю, где стена..."))
+            o, n = hammer_probe_surface(pid, main, pt, progress)
+            if o is None:
+                return False, n
+            # 3. префаб: относительно точки, куда Hammer поставит его начало (x, y - до целых)
+            width = max(1.0, float(sign["width"]))
+            height = max(1.0, width * float(sign["ratio"]))
+            depth = max(0.5, float(sign["depth"]))
+            origin = [round(o[0]), round(o[1]), o[2]]
+            center = _v_sub(_v_add(o, _v_mul(n, depth / 2)), origin)
+            name = re.sub(r"[^a-z0-9_]", "_", material.split("/")[-1].lower())[:48] or "sign"
+            folder = os.path.join(prefab_dir, SIGN_CATEGORY)
+            os.makedirs(folder, exist_ok=True)
+            for old in os.listdir(folder):  # прошлые таблички уже в карте - файлы не нужны
+                if old.lower().endswith(".vmf"):
+                    try:
+                        os.remove(os.path.join(folder, old))
+                    except OSError:
+                        pass
+            with open(os.path.join(folder, name + ".vmf"), "w", encoding="utf-8", newline="\n") as f:
+                f.write(sign_prefab_vmf(center, n, width, height, depth, material, sign["tex_w"],
+                                        sign["tex_h"], side_mat))
+            hlog(f"sign: {width:g}x{height:g}x{depth:g} at {o} n={n} sides={side_mat!r}")
+            # 4. Entity + наш префаб, привязка выключена, клик в ту же точку
+            progress(tr("ставлю табличку..."))
+            _hw_reactivate(main)
+            _hw_send(main, 0x0111, ID_ENTITY_TOOL, 0)
+            time.sleep(0.3)
+            bar = _hw_find_desc(main, lambda h: _hw_class(h) == "#32770" and _hw_text(h) == "New Objects")
+            if not bar or not _combo_pick(bar, OBJBAR_CATEGORY, SIGN_CATEGORY) or \
+                    not _combo_pick(bar, OBJBAR_OBJECT, name):
+                return False, tr("Hammer не показал префаб таблички - попробуй ещё раз")
+            snap_was_on = "Snap: On" in hammer_selection_text(main, rm, part=5)
+            if snap_was_on:
+                _hw_send(main, 0x0111, ID_SNAP_GRID, 0)
+                t0 = time.time()
+                while "Snap: On" in hammer_selection_text(main, rm, part=5) and time.time() - t0 < 2:
+                    time.sleep(0.05)
+            ok, msg = _hammer_click_at(pid, main, ID_ENTITY_TOOL, pt, progress, "")
+            time.sleep(0.3)
+            undo = hammer_undo_text(main)
+            hlog(f"sign inserted: ok={ok} undo={undo!r}")
+            if not ok:
+                return False, msg.lstrip(". ")
+            if undo != "Undo New Prefab":
+                return False, tr("Hammer не вставил табличку ({undo})").format(undo=undo)
+    finally:
+        if snap_was_on and "Snap: On" not in hammer_selection_text(main, rm, part=5):
+            _hw_send(main, 0x0111, ID_SNAP_GRID, 0)  # вернуть привязку как было
+        rm.close()
+        _hw_send(main, 0x0111, ID_TOOL_SELECTION, 0)
+    return True, tr("табличка {material} поставлена на стену").format(material=material)
+
+
+def hammer_pick_texture(progress=lambda s: None):
+    """Кнопка "Выбрать в Hammer...": открыть браузер текстур Hammer (видимо), дождаться, пока
+    пользователь выберет текстуру двойным щелчком и браузер закроется. -> имя или ''."""
+    ctypes, wintypes, u = _u32()
+    pid, main = hammer_find()
+    if not main:
+        return ""
+    _hw_foreground(main)
+    dlg, _ = _hw_open_browser(pid, main)
+    if not dlg:
+        return ""
+    _hw_foreground(dlg)
+    last = ""
+    t0 = time.time()
+    while u.IsWindow(dlg) and u.IsWindowVisible(dlg) and time.time() - t0 < 600:
+        last = _hw_text(u.GetDlgItem(dlg, 1267)).strip() or last
+        time.sleep(0.1)
+    # закрыт: выбранное двойным щелчком стало текущей текстурой - перепроверить
+    cur = hammer_current_texture(pid, main)
+    return cur or last
 
 
 def _hammer_click_at(pid, main, tool_id, pt, progress, msg):
@@ -3206,6 +3553,12 @@ class App:
                 return w
 
             star, _ = page.field(key, label, make)  # "\n" в подписи - перенос (колонка узкая)
+            if key == "sign_material":
+                def pick_row(master):
+                    fr = ttk.Frame(master)
+                    ttk.Button(fr, text=tr("Выбрать в Hammer..."), command=self.pick_sign_material).pack(side="left")
+                    return fr
+                page.widget_row(pick_row, indent=(page.xf - page.xc) / self.S, gap=3)
             if key == "shader":
                 self.shader_hints.append(page.hint())
         self.stars.setdefault(key, []).append(star)
@@ -3731,6 +4084,8 @@ class App:
             text = tr("Отпусти над стеной в 3D-виде -\nкартинка станет оверлеем\n(clip2vtf)")
         elif tool == TOOL_FACE:
             text = tr("Отпусти над гранью браша в 3D-виде -\nкартинка станет её текстурой\n(clip2vtf)")
+        elif tool == TOOL_SIGN:
+            text = tr("Отпусти над стеной в 3D-виде -\nна ней появится табличка с картинкой\n(clip2vtf)")
         else:
             text = tr("Отпусти над стеной в 3D-виде -\nкартинка станет декалью\n(clip2vtf)")
         self.drop_label.config(text=text)
@@ -3934,6 +4289,9 @@ class App:
                 kind, a, b = self.jobs.get_nowait()
                 if kind == "toast":  # ход постановки в Hammer из рабочего потока
                     self.show_toast(a, error=b)
+                    continue
+                if kind == "picked":  # выбор материала граней таблички в Hammer
+                    self.on_picked(a)
                     continue
                 if kind == "resized":  # ((ok, пересоздана, материал, юниты), сообщение)
                     self.on_resized(a, b)
@@ -4275,14 +4633,14 @@ class App:
 
     def place_in_hammer(self, pt):
         """Картинку отпустили над Hammer: сохранить материал и поставить на стену - декалью,
-        текстурой грани или оверлеем (настройка "В Hammer как")."""
+        текстурой грани, оверлеем или табличкой (настройка "В Hammer как")."""
         if self.hammer_busy:
             self.set_status(tr("Hammer ещё занят предыдущей картинкой"), error=True)
             return
         tool = HAMMER_TOOL.get(self.v["hammer_mode"].get(), HAMMER_TOOL[HAMMER_MODES[0]])
         # текстуре браша нужен обычный материал стены, без $decal (с ним Hammer рисует грань
         # как декаль, а игра - вообще не рисует)
-        shader = "LightmappedGeneric" if tool == TOOL_FACE else DECAL
+        shader = "LightmappedGeneric" if tool in (TOOL_FACE, TOOL_SIGN) else DECAL
         self.save(shader_override=shader, force_unique=True, to_client=True, send=False)
         if not self.last_saved:
             hlog(f"save failed: {self.status.cget('text')}")
@@ -4295,16 +4653,65 @@ class App:
         self.last_save_text = text
         self.set_status(tr("{text}. Ставлю в Hammer...").format(text=text))
         face = {k: self.v["brush_" + k].get() for k in ("mode", "scale", "align", "rotate", "luxel")}
+        sign = None
+        if tool == TOOL_SIGN:
+            tw, th = self.result.size
+            # "Растянуть": в текстуре картинка растянута до степени двойки - пропорции таблички
+            # берутся от самой картинки; при полях/обрезке - от текстуры (картинка в ней с полями)
+            if self.v["fit"].get().startswith("Растянуть"):
+                pw, ph = self.prepared().size
+            else:
+                pw, ph = tw, th
+
+            def num(key, default):
+                try:
+                    v = float(str(self.v[key].get()).replace(",", "."))
+                    return v if v > 0 else default
+                except ValueError:
+                    return default
+            sign = dict(width=num("sign_width", 128.0), depth=num("sign_depth", 8.0), ratio=ph / pw,
+                        tex_w=tw, tex_h=th, sides=self.v["sign_sides"].get(),
+                        custom=self.v["sign_material"].get().strip())
 
         def work():
             try:
-                ok, msg = hammer_place(mat, new_file, tool, pt, face=face,
+                ok, msg = hammer_place(mat, new_file, tool, pt, face=face, sign=sign,
                                        progress=lambda s: self.jobs.put(("toast", s, False)))
             except Exception as ex:
                 ok, msg = False, tr("ошибка: {ex}").format(ex=ex)
             self.jobs.put(("hammer", ok, msg))
 
         threading.Thread(target=work, daemon=True).start()
+
+    def pick_sign_material(self):
+        """Кнопка "Выбрать в Hammer...": открыть браузер текстур Hammer, дождаться выбора."""
+        if self.hammer_busy:
+            self.set_status(tr("Hammer ещё занят предыдущей картинкой"), error=True)
+            return
+        if not hammer_find()[1]:
+            self.set_status(tr("Hammer++ не запущен"), error=True)
+            return
+        self.hammer_busy = True
+        self.set_status(tr("Выбери текстуру в браузере Hammer двойным щелчком"))
+
+        def work():
+            try:
+                name = hammer_pick_texture()
+            except Exception as ex:
+                hlog(f"pick texture failed: {ex}")
+                name = ""
+            self.jobs.put(("picked", name, None))
+        threading.Thread(target=work, daemon=True).start()
+
+    def on_picked(self, name):
+        self.hammer_busy = False
+        if not name:
+            self.set_status(tr("Текстура не выбрана"), error=True)
+            return
+        self.v["sign_material"].set(name)
+        self.v["sign_sides"].set(SIGN_SIDES[2])
+        self.save_settings()
+        self.set_status(tr("Остальные грани таблички: {name}").format(name=name))
 
     def send_to_hammer(self, quiet_if_absent=False, new_file=False):
         """Сделать текущий материал текущей текстурой Hammer++ (в фоне, окно не зависает)."""

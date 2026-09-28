@@ -24,7 +24,7 @@ SRC = os.path.join(HERE, "clip2vtf.pyw")
 LANG_DIR = os.path.join(HERE, "lang")
 # Values stored in settings and shown through tr() at display time (see value_combo).
 VALUE_LISTS = ("SIZES", "FITS", "FORMATS", "SHADERS", "ALPHA_MODES", "HAMMER_MODES", "BRUSH_FITS",
-               "BRUSH_ALIGNS", "BRUSH_ROTATES", "BRUSH_LUXELS")
+               "BRUSH_ALIGNS", "BRUSH_ROTATES", "BRUSH_LUXELS", "SIGN_SIDES")
 
 
 def source_keys():
